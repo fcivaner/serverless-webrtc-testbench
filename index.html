@@ -1,0 +1,144 @@
+﻿﻿<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+  </head>
+  <body>
+    <div style="width: 50%;">
+      <div style="width: 100%;height: 500px;">
+        <textarea
+          readonly
+          id="log_textbox"
+          style="width: 100%;height: 90%;"
+        ></textarea>
+        Chat: <input id="chat_input" style="width: 100%;" /><br />
+      </div>
+
+      <div style="width: 100%;">
+        <button id="create_offer_button" onclick="createOffer()">
+          Create Offer
+        </button>
+        <button id="accept_offer_button" onclick="acceptOffer()">
+          Accept Offer
+        </button>
+        <button id="accept_answer_button" onclick="acceptAnswer()">
+          Accept Answer
+        </button>
+        SDP:
+        <textarea id="sdp_textbox"></textarea>
+        <button id="start_video_button" onclick="startVideo()">
+          Start your video
+        </button>
+      </div>
+
+      <div style="width: 100%;">
+        <div style="width: 45%;display: inline-block;">
+          Your video:
+          <video id="local_video" width="100%" autoplay muted></video>
+        </div>
+        <div style="width: 45%;display: inline-block;">
+          Their video:
+          <video id="received_video" width="100%" autoplay></video>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var mediaConstraints = {
+        audio: true,
+        video: {
+          aspectRatio: {
+            ideal: 1.333333
+          }
+        }
+      };
+
+      const log = msg => (log_textbox.value += `\n${msg}`);
+
+      const config = { iceServers: [{ urls: "stun:stun.1.google.com:19302" }] };
+
+      const pc = new RTCPeerConnection(config);
+      pc.oniceconnectionstatechange = e => log(pc.iceConnectionState);
+      pc.ontrack = handleTrackEvent;
+      pc.onicecandidate = handleICECandidateEvent;
+      pc.onaddstream = function(evt) {
+        log("# stream event");
+      };
+
+      const dc = pc.createDataChannel("chat", { negotiated: true, id: 0 });
+      dc.onopen = () => chat_input.select();
+      dc.onmessage = e => log(`peer: ${e.data}`);
+
+      async function addTracks() {
+        log("# opening media..");
+        webcamStream = await navigator.mediaDevices.getUserMedia(
+          mediaConstraints
+        );
+
+        document.getElementById("local_video").srcObject = webcamStream;
+
+        log("# adding tracks");
+        webcamStream.getTracks().forEach(
+          (transceiver = track =>
+            pc.addTransceiver(track, {
+              streams: [webcamStream]
+            }))
+        );
+
+        log("# tracks added");
+      }
+
+      function handleICECandidateEvent(event) {
+        if (event.candidate) {
+          log("# outgoing ICE candidate: ");
+          log(event.candidate.candidate);
+        } else {
+          log(`# ${pc.localDescription.type} created.`);
+          sdp_textbox.value = pc.localDescription.sdp;
+        }
+      }
+
+      function handleTrackEvent(event) {
+        log("# track event");
+        document.getElementById("received_video").srcObject = event.streams[0];
+      }
+
+      chat_input.onkeypress = async function(e) {
+        if (e.keyCode != 13) return;
+        if (chat_input.value == "create-offer") {
+          await createOffer();
+        } else {
+          dc.send(chat_input.value);
+        }
+        log("you: " + chat_input.value);
+        chat_input.value = "";
+      };
+
+      async function createOffer() {
+        await pc.setLocalDescription(await pc.createOffer());
+      }
+
+      async function acceptOffer() {
+        log(`# signalingState: ${pc.signalingState}`);
+        if (pc.signalingState != "stable") return;
+
+        await pc.setRemoteDescription({
+          type: "offer",
+          sdp: sdp_textbox.value
+        });
+        await pc.setLocalDescription(await pc.createAnswer());
+      }
+
+      async function acceptAnswer() {
+        log(`# signalingState: ${pc.signalingState}`);
+        if (pc.signalingState != "have-local-offer") return;
+
+        pc.setRemoteDescription({ type: "answer", sdp: sdp_textbox.value });
+      }
+
+      startVideo = async function(e) {
+        await addTracks();
+      };
+    </script>
+  </body>
+</html>
