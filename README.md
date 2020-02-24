@@ -10,7 +10,7 @@ This sample can be used as a testbench to understand how signalling works in a W
 
 To keep it as simple as possible, all code is in a single html file.
 
-## Test it
+## Try it!
 
 ![serverless-webrtc](snap.png)
 
